@@ -15,8 +15,6 @@ from sqlalchemy import create_engine,text,engine
 from datetime import datetime
 
 
-
-
 class PREPARE:
 
 
@@ -150,6 +148,11 @@ class PREPARE:
             self.alert_slack("Danger! cannot insert log table")
             self.info_msg(self.log_to_db.__name__,e)
             #sys.exit()
+        
+    def mfg_date(self,date_time):
+        mfg_date = date_time - timedelta(hours=7)
+        mfg_date_string = mfg_date.strftime("%Y-%m-%d")
+        return mfg_date_string
 
 class MQTT_TO_DB(PREPARE):
     def __init__(self,server,database,user_login,password,table,table_columns,table_log,table_columns_log,mqtt_topic,mqtt_broker,slack_notify_token=None):
@@ -198,7 +201,8 @@ class MQTT_TO_DB(PREPARE):
                 cursor.execute(f"""
                 INSERT INTO [{self.database}].[dbo].[{self.table}] 
                 values(
-                    getdate(), 
+                    getdate(),
+                    cast(DATEADD(hh,-7,GETDATE()) as DATE),
                     '{row.my_str}',
                     '{row.temp2}',
                     '{row.tmp1}',

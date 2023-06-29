@@ -2,6 +2,7 @@
 IRR_CHANGE_BITE_TABLE = 'data_irr_change_bite'
 IRR_CHANGE_BITE_TABLE_COLUMNS ='''
             registered_at datetime,
+            mfg_date date,
             my_str varchar(20),
 			temp2 varchar(10),
             tmp1 varchar(10),
