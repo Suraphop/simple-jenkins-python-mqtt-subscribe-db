@@ -250,10 +250,13 @@ class MQTT_TO_DB(PREPARE):
         return client
 
     def run(self):
-        logging.basicConfig(format='%(asctime)s - %(levelname)s: %(message)s',
-                            level=logging.DEBUG)
-        self.stamp_time()
-        self.check_table()
-        self.check_table_log()
-        client = self.connect_mqtt()
-        client.loop_forever()
+        try:
+            logging.basicConfig(format='%(asctime)s - %(levelname)s: %(message)s',
+                                level=logging.DEBUG)
+            self.stamp_time()
+            self.check_table()
+            self.check_table_log()
+            client = self.connect_mqtt()
+            client.loop_forever()
+        except Exception as e:
+            self.error_msg(self.run.__name__,"mqtt subscription crash",e)
