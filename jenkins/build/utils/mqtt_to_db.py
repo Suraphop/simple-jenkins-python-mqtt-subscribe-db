@@ -20,7 +20,7 @@ from datetime import datetime
 class PREPARE:
 
 
-    def __init__(self,server,database,user_login,password,table,table_columns,table_log,table_columns_log,line_notify_token,mqtt_topic,mqtt_broker):
+    def __init__(self,server,database,user_login,password,table,table_columns,table_log,table_columns_log,mqtt_topic,mqtt_broker,slack_notify_token):
         self.server = server
         self.database = database
         self.user_login = user_login
@@ -29,10 +29,11 @@ class PREPARE:
         self.table = table
         self.table_columns = table_columns
         self.table_columns_log = table_columns_log
-        self.line_notify_token = line_notify_token
+        self.slack_notify_token = slack_notify_token
         self.mqtt_topic = mqtt_topic
         self.mqtt_broker = mqtt_broker
-        self.datas = None
+        self.data_nows = None
+        self.data_prvs = None
         self.df_insert = pd.DataFrame({'' : []})
 
     def stamp_time(self):
@@ -85,23 +86,22 @@ class PREPARE:
         result = {"status":constant.STATUS_ERROR,"process":process,"message":msg,"error":e}
     
         try:
-            self.alert_line(self.alert_error_msg(result))
+            self.alert_slack(self.alert_error_msg(result))
             self.log_to_db(result)
             #sys.exit()
         except Exception as e:
             self.info_msg(self.error_msg.__name__,e)
             #sys.exit()
-    
-    def alert_line(self,msg):
-        value = alert.line_notify(self.line_notify_token,msg)
-        value = json.loads(value)  
-        if value["message"] == constant.STATUS_OK:
-            self.info_msg(self.alert_line.__name__,'send msg to line notify')
+
+    def alert_slack(self,msg):
+        value= alert.slack_notify(self.slack_notify_token,msg)
+        if value == constant.STATUS_OK:
+            self.info_msg(self.alert_slack.__name__,'send msg to slack notify')
         else:
-            self.info_msg(self.alert_line.__name__,value)
+            self.info_msg(self.alert_slack.__name__,value)
 
     def alert_error_msg(self,result):
-        if self.line_notify_token != None:
+        if self.slack_notify_token != None:
             return f'\nproject: {self.table}\nprocess: {result["process"]}\nmessage: {result["message"]}\nerror: {result["error"]}\n'
                 
     def info_msg(self,process,msg):
@@ -123,7 +123,7 @@ class PREPARE:
             cursor = cnxn.cursor()
             return cnxn,cursor
         except Exception as e:
-            self.alert_line("Danger! cannot connect sql server")
+            self.alert_slack("Danger! cannot connect sql server")
             self.info_msg(self.conn_sql.__name__,e)
             sys.exit()
 
@@ -147,13 +147,13 @@ class PREPARE:
             cnxn.commit()
             cursor.close()
         except Exception as e:
-            self.alert_line("Danger! cannot insert log table")
+            self.alert_slack("Danger! cannot insert log table")
             self.info_msg(self.log_to_db.__name__,e)
             #sys.exit()
 
 class MQTT_TO_DB(PREPARE):
-    def __init__(self,server,database,user_login,password,table,table_columns,table_log,table_columns_log,mqtt_topic,mqtt_broker,line_notify_token=None):
-        super().__init__(server,database,user_login,password,table,table_columns,table_log,table_columns_log,line_notify_token,mqtt_topic,mqtt_broker)        
+    def __init__(self,server,database,user_login,password,table,table_columns,table_log,table_columns_log,mqtt_topic,mqtt_broker,slack_notify_token=None):
+        super().__init__(server,database,user_login,password,table,table_columns,table_log,table_columns_log,mqtt_topic,mqtt_broker,slack_notify_token)        
 
     def on_connect(self,client, userdata, flags, rc):
         if rc == 0 and client.is_connected():
@@ -199,7 +199,6 @@ class MQTT_TO_DB(PREPARE):
                 INSERT INTO [{self.database}].[dbo].[{self.table}] 
                 values(
                     getdate(), 
-                    '{row.data_timestamp}',
                     '{row.my_str}',
                     '{row.temp2}',
                     '{row.tmp1}',
@@ -211,16 +210,17 @@ class MQTT_TO_DB(PREPARE):
 
             cnxn.commit()
             cursor.close()
-            self.df_insert = None   
+            self.df_insert = pd.DataFrame({'' : []})  
             self.info_msg(self.df_to_db.__name__,f"insert data successfully")        
         except Exception as e:
             self.error_msg(self.df_to_db.__name__,"cannot insert df to sql",e)
 
-    def check_topic(self):
-        if int(self.datas["temp2"]) > 5:
-            df_insert = [self.datas]
-            self.df_insert = pd.DataFrame.from_dict(df_insert)
-            print(self.df_insert)
+    def check_change_bite(self):
+        if self.data_prvs != None:
+            if int(self.data_nows["temp2"]) < int(self.data_prvs["temp2"]):
+                df_insert = [self.data_prvs]
+                self.df_insert = pd.DataFrame.from_dict(df_insert)
+        self.data_prvs = self.data_nows
             
     def on_message(self,client, userdata, msg):
         #print(f'Received `{msg.payload.decode()}` from `{msg.topic}` topic')
@@ -230,8 +230,8 @@ class MQTT_TO_DB(PREPARE):
         process = msg.topic.split("/")[-2]
         datas["mc_no"] = mc_no
         datas["process"] = process
-        self.datas = datas
-        self.check_topic()
+        self.data_nows = datas
+        self.check_change_bite()
         if not self.df_insert.empty:
             self.df_to_db()
             #print(self.df_insert)

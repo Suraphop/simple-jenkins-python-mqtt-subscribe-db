@@ -17,6 +17,7 @@ mqtt_to_db = MQTT_TO_DB(
         table_columns_log=constant.IRR_CHANGE_BITE_TABLE_COLUMNS_LOG,
         mqtt_topic=constant.MQTT_TOPIC,
         mqtt_broker=os.getenv('MQTT_BROKER'),
-        line_notify_token=os.getenv('LINE_NOTIFY_TOKEN'),
+        slack_notify_token=os.getenv('SLACK_NOTIFY_TOKEN')
     )
+
 mqtt_to_db.run()
